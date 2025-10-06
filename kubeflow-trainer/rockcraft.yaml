@@ -1,0 +1,51 @@
+# Source https://github.com/kubeflow/trainer/blob/v2.0.1/cmd/trainer-controller-manager/Dockerfile
+name: kubeflow-trainer
+summary: An image for Kubeflow Trainer
+description: |
+  Kubeflow Trainer is a Kubernetes-native project for fine-tuning and scalable 
+  distributed training of machine learning (ML) models created with various ML frameworks.
+version: "2.0.1"
+license: Apache-2.0
+base: ubuntu@22.04
+
+platforms:
+  amd64:
+
+services:
+  kubeflow-trainer:
+    override: merge
+    command: "/manager"
+    startup: enabled
+
+run-user: _daemon_
+
+parts:
+  security-team-requirement:
+    plugin: nil
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/usr/share/rocks
+      (echo "# os-release" && cat /etc/os-release && echo "# dpkg-query" && \
+       dpkg-query -f '${db:Status-Abbrev},${binary:Package},${Version},${source:Package},${Source:Version}\n' -W) > \
+       ${CRAFT_PART_INSTALL}/usr/share/rocks/dpkg.query
+
+  kubeflow-trainer:
+    plugin: go
+    build-snaps:
+      - go/1.24/stable
+    source: https://github.com/kubeflow/trainer
+    source-type: git
+    source-tag: v2.0.1
+    source-depth: 1
+    source-subdir: cmd/trainer-controller-manager
+    build-environment:
+      - CGO_ENABLED: 0
+      - GOOS: linux
+    override-build: |
+      # cd into $CRAFT_PART_SRC_WORK due to https://github.com/canonical/craft-parts/issues/427
+      cd $CRAFT_PART_SRC_WORK
+      go mod download
+      go build -a -o $CRAFT_PART_INSTALL/manager main.go
+    stage:
+      - manager
+    prime:
+      - manager

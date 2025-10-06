@@ -1,0 +1,20 @@
+name: Publish
+
+on:
+  push:
+    branches:
+    - main-v2
+    - track/**
+
+jobs:
+
+  on-push:
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/get-rocks-modified-and-build-scan-test-publish.yaml@main
+    permissions:
+      pull-requests: read
+    secrets: inherit
+    with:
+      microk8s-channel: 1.32-strict/stable
+      juju-channel: 3.6/stable
+      python-version: "3.8"
+      rockcraft-channel: latest/stable
