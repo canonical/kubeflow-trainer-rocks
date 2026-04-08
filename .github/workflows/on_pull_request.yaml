@@ -5,7 +5,9 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  pull_request:
+  pull_request_target:
+    branches:
+      - invalid
 
 jobs:
   populate-labels:
@@ -18,7 +20,7 @@ jobs:
       label_prefix: "backport "
 
   on-pull-request:
-    uses: canonical/charmed-kubeflow-workflows/.github/workflows/get-rocks-modified-and-build-scan-test-publish.yaml@main
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/get-rocks-modified-and-build-scan-test-publish.yaml@chore/ci-improvements
     permissions:
       pull-requests: read
     secrets: inherit

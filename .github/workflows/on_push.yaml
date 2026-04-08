@@ -5,11 +5,14 @@ on:
     branches:
     - main
     - track/**
+    - test-ci
 
 jobs:
 
-  on-push:
-    uses: canonical/charmed-kubeflow-workflows/.github/workflows/get-rocks-modified-and-build-scan-test-publish.yaml@main
+  get-rock-paths-modified:
+    name: Get rockcraft paths modified
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/get-rocks-modified.yaml@ci/test
+    with:
+      base-ref: ${{ github.ref_name }}
     permissions:
       pull-requests: read
-    secrets: inherit
