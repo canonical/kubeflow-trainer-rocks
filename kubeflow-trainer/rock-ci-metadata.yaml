@@ -1,1 +1,6 @@
-integrations: []
+integrations:
+  - consumer-repository: https://github.com/canonical/kubeflow-trainer-operator.git
+
+    replace-image:
+      - file: config.yaml
+        path: options.kubeflow-trainer-image.default
