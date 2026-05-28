@@ -6,7 +6,7 @@ on:
 jobs:
   populate-labels:
     name: Populate labels
-    if: github.base_ref == 'main-v2' && (github.event.action == 'opened' || github.event.action == 'reopened')
+    if: github.base_ref == 'main' && (github.event.action == 'opened' || github.event.action == 'reopened')
     uses: canonical/charmed-kubeflow-workflows/.github/workflows/populate-labels.yaml@main
     secrets: inherit
     with:
