@@ -43,3 +43,4 @@ parts:
       cd $CRAFT_PART_SRC
       make build GO_BUILD_ENV='CGO_ENABLED=${CGO_ENABLED} GOOS=${GOOS}'
       cp bin/manager $CRAFT_PART_INSTALL
+
