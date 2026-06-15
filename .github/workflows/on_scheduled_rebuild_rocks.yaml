@@ -17,15 +17,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install yq
-        run: sudo snap install yq
-
       - name: Build ref matrix from automatic_backport_tracks.yaml
         id: compute
         run: |
           file=.github/automatic_backport_tracks.yaml
           if [ -f "$file" ]; then
-            refs=$(yq -o=json '["main"] + .automatic_backport_tracks' "$file" | jq -c .)
+            refs=$(yq -o=json -I=0 '["main"] + .automatic_backport_tracks' "$file")
           else
             echo "::warning file=${file}::${file} not found; falling back to main only"
             refs='["main"]'
