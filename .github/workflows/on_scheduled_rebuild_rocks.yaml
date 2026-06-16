@@ -1,0 +1,46 @@
+name: Scheduled rebuild rocks
+
+on:
+  schedule:
+    - cron: '0 4 1 * *'   # 1st of each month, 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  list-refs:
+    name: Compute ref matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      refs: ${{ steps.compute.outputs.refs }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build ref matrix from automatic_backport_tracks.yaml
+        id: compute
+        run: |
+          file=.github/automatic_backport_tracks.yaml
+          if [ -f "$file" ]; then
+            refs=$(yq -o=json -I=0 '["main"] + .automatic_backport_tracks' "$file")
+          else
+            echo "::warning file=${file}::${file} not found; falling back to main only"
+            refs='["main"]'
+          fi
+          echo "Refs: ${refs}"
+          echo "refs=${refs}" >> "$GITHUB_OUTPUT"
+
+  build-scan-test-publish:
+    name: Build, scan, test and publish rocks (${{ matrix.ref }})
+    needs: list-refs
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJson(needs.list-refs.outputs.refs) }}
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/get-all-rocks-and-build-scan-test-publish.yaml@main
+    permissions:
+      contents: read
+      issues: write
+    secrets: inherit
+    with:
+      base-ref: ${{ matrix.ref }}
