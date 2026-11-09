@@ -1,4 +1,6 @@
 # Python dependencies required for development
+# Based on https://github.com/pytorch/pytorch/blob/v2.7.1/requirements.txt
+# Dependencies were pinned to specific versions for reproducibility
 astunparse==1.6.3
 cmake==4.0.2
 expecttest==0.3.0
