@@ -7,7 +7,7 @@ spec:
   runtimeClassName: nvidia
   containers:
     - name: gpu-test-distributed
-      image: docker.io/library/torch-distributed-runtime:2.7.1-cuda12.8-cudnn9-runtime
+      image: ${IMAGE}
       imagePullPolicy: Never
       command: ["sleep", "3600"]
       resources:
@@ -19,5 +19,5 @@ spec:
   volumes:
     - name: gpu-tests
       hostPath:
-        path: /home/ubuntu/gpu-tests
+        path: ${HOST_PATH}
         type: Directory
