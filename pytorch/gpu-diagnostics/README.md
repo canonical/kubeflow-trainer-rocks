@@ -16,10 +16,18 @@ NVIDIA device plugin/runtime class.
 ## Prerequisites
 
 - A Kubernetes cluster (e.g. via Juju/charmed-kubernetes) with GPU worker
-  nodes.
-- The NVIDIA GPU Operator/device plugin installed, providing the `nvidia`
-  `RuntimeClass` and `nvidia.com/gpu` resource used by the manifests.
-- The rock image loaded on the node as
+  nodes, each with a working NVIDIA driver (`nvidia-smi` reports all GPUs).
+- The NVIDIA GPU Operator installed, with all its pods (including the
+  `nvidia-cuda-validator` and `nvidia-operator-validator`) healthy — this is
+  what provides the `nvidia` `RuntimeClass` and `nvidia.com/gpu` resource used
+  by the manifests.
+  > On nodes with NVSwitch-connected GPUs (e.g. DGX/HGX-class multi-GPU
+  > systems), the host driver and `nvidia-fabricmanager` package must be the
+  > exact same version — a mismatch will leave the GPU Operator validators
+  > stuck in `CrashLoopBackOff`.
+- The rock image already imported into the node's containerd (not pulled
+  from a registry) and tagged with a fully-qualified reference matching
+  what the manifests use, e.g.
   `docker.io/library/torch-distributed-runtime:2.7.1-cuda12.8-cudnn9-runtime`
   (manifests use `imagePullPolicy: Never`).
 
