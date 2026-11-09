@@ -1,0 +1,118 @@
+# Based on https://github.com/pytorch/pytorch/blob/v2.7.1/Dockerfile, using the
+
+name: torch-distributed-runtime
+summary: PyTorch distributed runtime for NVIDIA GPUs
+description: |
+  A CUDA-enabled PyTorch runtime: torch, torchvision and torchaudio installed
+  from the official PyTorch wheel index inside a uv-managed virtual
+  environment, plus torchelastic for fault-tolerant distributed
+  training/inference on NVIDIA GPUs.
+version: "2.7.1-cuda12.8-cudnn9-runtime"
+license: Apache-2.0
+base: ubuntu@22.04
+run-user: _daemon_
+
+platforms:
+  amd64:
+
+# Top-level env is written to OCI config.Env (used by NVIDIA runtime hooks).
+# Keep paths fully expanded: rockcraft forbids '$' interpolation here.
+environment:
+  VIRTUAL_ENV: "/opt/venv"
+  PATH: "/opt/venv/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  NVIDIA_VISIBLE_DEVICES: "all"
+  NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+  # Host-mounted driver paths only; pip packages (nvidia-*-cu12) supply the
+  # CUDA runtime, so no system CUDA toolkit is installed in this rock.
+  LD_LIBRARY_PATH: "/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
+  PYTORCH_VERSION: "2.7.1"
+
+parts:
+  security-team-requirement:
+    plugin: nil
+    after: [pytorch]
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/usr/share/rocks
+      (echo "# os-release" && cat /etc/os-release && echo "# dpkg-query" && \
+      dpkg-query --root=${CRAFT_PROJECT_DIR}/../bundles/ubuntu-22.04/rootfs/ -f '${db:Status-Abbrev},${binary:Package},${Version},${source:Package},${Source:Version}\n' -W) \
+      > ${CRAFT_PART_INSTALL}/usr/share/rocks/dpkg.query
+
+  pytorch:
+    plugin: nil
+    overlay-packages:
+      - ca-certificates
+      - libjpeg-dev
+      - libpng-dev
+    build-packages:
+      - build-essential
+      - ca-certificates
+      - curl
+    build-environment:
+      - PYTHON_VERSION: "3.11"
+      # Built in place at their final /opt paths: uv embeds these absolute
+      # paths in shebangs/symlinks, so building elsewhere and copying later
+      # leaves the venv pointing at a build-only path that doesn't exist at runtime.
+      - VIRTUAL_ENV: "/opt/venv"
+      - UV_PYTHON_INSTALL_DIR: "/opt/uv/python"
+      - CUDA_VERSION: "12.8"
+      - CUDA_PATH: "cu128"
+      - INSTALL_CHANNEL: "whl"
+      # These version are according to the official PyTorch v2.7.1 compatibility.
+      # https://pytorch.org/get-started/previous-versions
+      - PYTORCH_VERSION: "2.7.1"
+      - TORCHVISION_VERSION: "0.22.1"
+      - TORCHAUDIO_VERSION: "2.7.1"
+      # Latest Torchelastic version. Upstream installs this version.
+      - TORCHELASTIC_VERSION: "0.2.2"
+    override-build: |
+      set -eux -o pipefail
+
+      # Mount targets for NVIDIA runtime-injected libs/tools.
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/local/nvidia/bin"
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/local/nvidia/lib"
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/local/nvidia/lib64"
+
+      # Install uv if not already installed.
+      which uv > /dev/null 2>&1 || (curl -LsSf https://astral.sh/uv/install.sh | sh && ln -sf /root/.local/bin/uv /usr/local/bin/uv)
+      export PATH="/root/.local/bin:$PATH"
+
+      # --clear makes this idempotent across retries in a cached build instance.
+      uv venv --python "${PYTHON_VERSION}" "${VIRTUAL_ENV}" --clear
+
+      # Raise uv's read timeout/retries so slow mirrors don't abort the build.
+      export UV_HTTP_TIMEOUT=500
+      export UV_HTTP_RETRIES=5
+
+      uv pip install -r "${CRAFT_PROJECT_DIR}/requirements.txt" # TODO: Pin req.txt file
+
+      # CUDA-enabled PyTorch, pinned to match this rock's declared version.
+      # Per-architecture index selection (kept for completeness, even though
+      # the current image only targets amd64): arm64 has no CUDA wheels, so
+      # it falls back to the CPU index.
+      case "${CRAFT_ARCH_BUILD_FOR}" in
+        (arm64) uv pip install --extra-index-url https://download.pytorch.org/whl/cpu/ \
+                 "torch==${PYTORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" "torchaudio==${TORCHAUDIO_VERSION}" ;;
+        (*)     uv pip install --index-url "https://download.pytorch.org/${INSTALL_CHANNEL}/${CUDA_PATH}/" \
+                 "torch==${PYTORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" "torchaudio==${TORCHAUDIO_VERSION}" ;;
+      esac
+
+      uv pip install "torchelastic==${TORCHELASTIC_VERSION}"
+      uv cache clean
+
+      # Verify if PyTorch is compiled with CUDA support.
+      IS_CUDA=$("${VIRTUAL_ENV}/bin/python" -c 'import torch; print(torch.cuda._is_compiled())')
+      echo "Is torch compiled with cuda: ${IS_CUDA}"
+      test "${IS_CUDA}" = "True"
+
+      # Promote the venv and its managed interpreter into the primed image.
+      mkdir -p "${CRAFT_PART_INSTALL}/opt"
+      cp -a "${VIRTUAL_ENV}" "${CRAFT_PART_INSTALL}/opt/venv"
+      cp -a /opt/uv "${CRAFT_PART_INSTALL}/opt/uv"
+
+  # Let the non-root _daemon_ user (584792) manage the venv and workspace
+  non-root-user:
+    plugin: nil
+    after: [pytorch]
+    override-prime: |
+      craftctl default
+      chown -R 584792:584792 ${CRAFT_PRIME}/opt/venv ${CRAFT_PRIME}/opt/uv
