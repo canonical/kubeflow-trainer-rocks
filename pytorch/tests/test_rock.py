@@ -8,7 +8,7 @@ import pytest
 def test_rock_filename(rock_container):
     """Test that the built rock's name/version match rockcraft.yaml."""
     check_rock = rock_container[0]
-    assert check_rock.get_name() == "torch-distributed-runtime"
+    assert check_rock.get_name() == "pytorch"
     assert check_rock.get_version() == "2.7.1-cuda12.8-cudnn9-runtime"
 
 

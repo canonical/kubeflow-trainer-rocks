@@ -1,7 +1,7 @@
 # GPU Diagnostics
 
 Smoke tests for validating NVIDIA GPU access inside the
-`torch-distributed-runtime` rock when deployed on Kubernetes with the
+`pytorch` rock when deployed on Kubernetes with the
 NVIDIA device plugin/runtime class.
 
 ## Contents
@@ -27,9 +27,7 @@ NVIDIA device plugin/runtime class.
   > stuck in `CrashLoopBackOff`.
 - The rock image already imported into the node's containerd (not pulled
   from a registry) and tagged with a fully-qualified reference matching
-  what the manifests use, e.g.
-  `docker.io/library/torch-distributed-runtime:2.7.1-cuda12.8-cudnn9-runtime`
-  (manifests use `imagePullPolicy: Never`).
+  `IMAGE` below (manifests use `imagePullPolicy: Never`).
 
 ## Usage
 
