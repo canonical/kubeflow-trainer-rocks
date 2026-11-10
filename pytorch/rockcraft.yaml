@@ -115,4 +115,8 @@ parts:
     after: [pytorch]
     override-prime: |
       craftctl default
-      chown -R 584792:584792 ${CRAFT_PRIME}/opt/venv ${CRAFT_PRIME}/opt/uv
+      mkdir -p "${CRAFT_PRIME}/workspace"
+      chown -R 584792:584792 \
+        "${CRAFT_PRIME}/opt/venv" \
+        "${CRAFT_PRIME}/opt/uv" \
+        "${CRAFT_PRIME}/workspace"
