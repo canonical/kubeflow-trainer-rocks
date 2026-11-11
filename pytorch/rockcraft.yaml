@@ -109,7 +109,9 @@ parts:
       cp -a "${VIRTUAL_ENV}" "${CRAFT_PART_INSTALL}/opt/venv"
       cp -a /opt/uv "${CRAFT_PART_INSTALL}/opt/uv"
 
-  # Let the non-root _daemon_ user (584792) manage the venv and workspace
+  # Let the non-root _daemon_ user (584792) manage the venv and workspace.
+  # `/workspace` must match the workingDir of the ClusterTrainingRuntime that consumes this rock
+  # (see rock-ci-metadata.yaml), and be writable: the trainer container writes there as the non-root user.
   non-root-user:
     plugin: nil
     after: [pytorch]
