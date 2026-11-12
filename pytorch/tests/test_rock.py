@@ -13,7 +13,7 @@ def test_rock_filename(rock_container):
 
 
 def test_container_is_running(rock_container):
-    """Test that the container keeps running (pebble starts with no failing services)."""
+    """Test that the container keeps running."""
     result = subprocess.run(
         ["docker", "inspect", "-f", "{{.State.Running}}", rock_container[1]],
         stdout=subprocess.PIPE,
