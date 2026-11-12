@@ -1,6 +1,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 import subprocess
+import textwrap
 
 import pytest
 
@@ -57,3 +58,40 @@ def test_torch_compiled_with_cuda(rock_container):
         check=True,
     )
     assert result.stdout.strip() == "True"
+
+
+def test_torch_compile(rock_container):
+    """Test runtime Inductor compilation as the non-root user without a GPU."""
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "--user",
+            "584792:584792",
+            "--env",
+            "TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor",
+            "--env",
+            "TRITON_CACHE_DIR=/tmp/triton",
+            rock_container[1],
+            "/opt/venv/bin/python",
+            "-c",
+            textwrap.dedent(
+                """\
+                import torch
+
+                torch._dynamo.config.suppress_errors = False
+
+                def model(tensor):
+                    return tensor.sin() + tensor.square()
+
+                inputs = torch.randn(1024, device="cpu")
+                expected = model(inputs)
+                compiled = torch.compile(
+                    model, backend="inductor", fullgraph=True
+                )
+                torch.testing.assert_close(compiled(inputs), expected)
+                """
+            ),
+        ],
+        check=True,
+    )

@@ -41,6 +41,7 @@ parts:
     plugin: nil
     overlay-packages:
       - ca-certificates
+      - g++
       - libjpeg-dev
       - libpng-dev
     build-packages:
