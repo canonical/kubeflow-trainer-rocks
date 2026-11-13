@@ -1,0 +1,6 @@
+integrations:
+  - consumer-repository: https://github.com/canonical/kubeflow-trainer-operator.git
+
+    replace-image:
+      - file: src/training_runtimes/torch_distributed.yaml
+        path: spec.template.spec.replicatedJobs[0].template.spec.template.spec.containers[0].image
