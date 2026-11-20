@@ -1,4 +1,5 @@
-# Based on https://github.com/pytorch/pytorch/blob/v2.7.1/Dockerfile
+# Based on https://github.com/kubeflow/trainer/blob/v2.1.0/cmd/trainers/torchtune/Dockerfile
+# Underlying image: https://github.com/pytorch/pytorch/blob/v2.7.1/Dockerfile
 
 name: pytorch
 summary: PyTorch distributed runtime for NVIDIA GPUs

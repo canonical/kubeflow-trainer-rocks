@@ -1,0 +1,266 @@
+# Based on https://github.com/kubeflow/trainer/blob/v2.1.0/cmd/runtimes/deepspeed/Dockerfile
+# Underlying images:
+# MPI Base: https://github.com/kubeflow/mpi-operator/blob/v0.6.0/build/base/Dockerfile
+# CUDA devel: https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/devel/Dockerfile?ref_type=heads
+# CUDA runtime: https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/runtime/Dockerfile?ref_type=heads
+# CUDA base: https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/base/Dockerfile?ref_type=heads
+
+name: deepspeed-runtime
+summary: DeepSpeed distributed runtime for NVIDIA GPUs
+description: |
+  A DeepSpeed runtime environment for distributed training on NVIDIA GPUs.
+version: "2.1.0-cuda12.8.1-devel"
+license: Apache-2.0
+base: ubuntu@22.04
+# Default for standalone runs; the ClusterTrainingRuntime runs as UID 1000 (mpiuser).
+run-user: _daemon_
+
+platforms:
+  amd64:
+
+# Top-level env is written to OCI config.Env (used by NVIDIA runtime hooks).
+# Keep paths fully expanded: rockcraft forbids '$' interpolation here.
+environment:
+  # Same PATH as the upstream v2.1.0 image (from skopeo inspect).
+  PATH: "/home/mpiuser/.local/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+  # --- CUDA Base ---
+  NVIDIA_REQUIRE_CUDA: "cuda>=12.8 brand=unknown,driver>=470,driver<471 brand=grid,driver>=470,driver<471 brand=tesla,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=vapps,driver>=470,driver<471 brand=vpc,driver>=470,driver<471 brand=vcs,driver>=470,driver<471 brand=vws,driver>=470,driver<471 brand=cloudgaming,driver>=470,driver<471 brand=unknown,driver>=535,driver<536 brand=grid,driver>=535,driver<536 brand=tesla,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=vapps,driver>=535,driver<536 brand=vpc,driver>=535,driver<536 brand=vcs,driver>=535,driver<536 brand=vws,driver>=535,driver<536 brand=cloudgaming,driver>=535,driver<536 brand=unknown,driver>=550,driver<551 brand=grid,driver>=550,driver<551 brand=tesla,driver>=550,driver<551 brand=nvidia,driver>=550,driver<551 brand=quadro,driver>=550,driver<551 brand=quadrortx,driver>=550,driver<551 brand=nvidiartx,driver>=550,driver<551 brand=vapps,driver>=550,driver<551 brand=vpc,driver>=550,driver<551 brand=vcs,driver>=550,driver<551 brand=vws,driver>=550,driver<551 brand=cloudgaming,driver>=550,driver<551 brand=unknown,driver>=560,driver<561 brand=grid,driver>=560,driver<561 brand=tesla,driver>=560,driver<561 brand=nvidia,driver>=560,driver<561 brand=quadro,driver>=560,driver<561 brand=quadrortx,driver>=560,driver<561 brand=nvidiartx,driver>=560,driver<561 brand=vapps,driver>=560,driver<561 brand=vpc,driver>=560,driver<561 brand=vcs,driver>=560,driver<561 brand=vws,driver>=560,driver<561 brand=cloudgaming,driver>=560,driver<561 brand=unknown,driver>=565,driver<566 brand=grid,driver>=565,driver<566 brand=tesla,driver>=565,driver<566 brand=nvidia,driver>=565,driver<566 brand=quadro,driver>=565,driver<566 brand=quadrortx,driver>=565,driver<566 brand=nvidiartx,driver>=565,driver<566 brand=vapps,driver>=565,driver<566 brand=vpc,driver>=565,driver<566 brand=vcs,driver>=565,driver<566 brand=vws,driver>=565,driver<566 brand=cloudgaming,driver>=565,driver<566"
+  CUDA_VERSION: "12.8.1"
+  LD_LIBRARY_PATH: "/usr/local/cuda/lib64"
+
+  # NVIDIA runtime environment variables for GPU visibility and capabilities.
+  NVIDIA_VISIBLE_DEVICES: "all"
+  NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+
+  # --- CUDA Devel ---
+  LIBRARY_PATH: "/usr/local/cuda/lib64/stubs"
+  NCCL_VERSION: "2.25.1-1"
+
+  # --- Deepspeed ---
+  HOME: /home/mpiuser
+parts:
+  mpioperator_base:
+    plugin: nil
+    build-packages:
+      - openssh-server
+      - openssh-client
+    build-environment:
+      - PORT: "2222"
+      - MPI_HOME: "/home/mpiuser"
+    override-build: |
+      set -eux -o pipefail
+
+      # Customization: skipped upstream's mkdir /var/run/sshd: only needed when sshd runs as root.
+
+      # Customization: skipped upstream's setcap here: the MPI base's sshd isn't copied into the DeepSpeed image.
+
+      # Edit copies: the build instance's /etc persists across reruns, $CRAFT_PART_INSTALL doesn't.
+      SSH_DIR="${CRAFT_PART_INSTALL}/etc/ssh"
+      mkdir -p ${SSH_DIR} ${CRAFT_PART_INSTALL}${MPI_HOME}
+      cp -a /etc/ssh/ssh_config /etc/ssh/sshd_config ${SSH_DIR}/
+
+      # Allow OpenSSH to talk to containers without asking for confirmation
+      # by disabling StrictHostKeyChecking.
+      # mpi-operator mounts the .ssh folder from a Secret. For that to work, we need
+      # to disable UserKnownHostsFile to avoid write permissions.
+      # Disabling StrictModes avoids directory and files read permission checks.
+      sed -i "s/[ #]\(.*StrictHostKeyChecking \).*/ \1no/g" ${SSH_DIR}/ssh_config \
+          && echo "    UserKnownHostsFile /dev/null" >> ${SSH_DIR}/ssh_config \
+          && sed -i "s/[ #]\(.*Port \).*/ \1${PORT}/g" ${SSH_DIR}/ssh_config \
+          && sed -i "s/#\(StrictModes \).*/\1no/g" ${SSH_DIR}/sshd_config \
+          && sed -i "s/#\(Port \).*/\1${PORT}/g" ${SSH_DIR}/sshd_config
+
+      # Customization: mpiuser is created in cuda_deepspeed's overlay, as in the upstream DeepSpeed image.
+
+      cp ${CRAFT_PROJECT_DIR}/sshd_config ${CRAFT_PART_INSTALL}${MPI_HOME}/.sshd_config
+
+      echo "Port ${PORT}" >> ${CRAFT_PART_INSTALL}${MPI_HOME}/.sshd_config
+
+  cuda_deepspeed:
+    plugin: nil
+    after: [mpioperator_base]
+    # Exclude the default ssh configs installed by openssh in the overlay so mpioperator_base's edited copies ship instead.
+    # Without this, staging fails with OverlayStageConflict (same paths, different contents); all other overlay files are kept.
+    overlay:
+      - -etc/ssh/ssh_config
+      - -etc/ssh/sshd_config
+    overlay-packages:
+      # --- CUDA Base ---
+      - curl # purged after fetching the keyring
+      - ca-certificates
+      - gnupg2
+
+      # --- Deepspeed ---
+      - openssh-server
+      - openssh-client
+      - libcap2-bin  # only for setcap, removed afterwards
+      - g++
+      - libopenmpi-dev
+      - python3-dev
+      - pip
+
+    override-overlay: |
+      set -eux -o pipefail
+
+      # --- CUDA Base ---
+
+      # Mirrors upstream's per-arch selection; only amd64 is built.
+
+      case "$(dpkg --print-architecture)" in
+        (amd64) NVARCH="x86_64" ;;
+        (arm64) NVARCH="sbsa" ;;
+        (*) echo "Unsupported architecture" >&2; exit 1 ;;
+      esac
+
+      NV_CUDA_CUDART_VERSION="12.8.90-1"
+
+
+      # Install the NVIDIA CUDA keyring and set up the repository.
+      curl -fsSLO "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${NVARCH}/cuda-keyring_1.1-1_all.deb"
+      dpkg -i cuda-keyring_1.1-1_all.deb
+      apt-get purge --autoremove -y curl
+      rm -f cuda-keyring_1.1-1_all.deb # Customization: upstream leaves the .deb in /; removed here.
+
+      apt-get update && apt-get install -y --no-install-recommends \
+        cuda-cudart-12-8=${NV_CUDA_CUDART_VERSION} \
+        cuda-compat-12-8 \
+        && rm -rf /var/lib/apt/lists/*
+
+      # Required for nvidia-docker v1
+      echo "/usr/local/cuda/lib64" >> /etc/ld.so.conf.d/nvidia.conf
+
+      # --- CUDA Runtime ---
+      NV_CUDA_LIB_VERSION=12.8.1-1
+
+      NV_NVTX_VERSION=12.8.90-1
+      NV_LIBNPP_VERSION=12.3.3.100-1
+      NV_LIBNPP_PACKAGE=libnpp-12-8=${NV_LIBNPP_VERSION}
+      NV_LIBCUSPARSE_VERSION=12.5.8.93-1
+
+      NV_LIBCUBLAS_PACKAGE_NAME=libcublas-12-8
+      NV_LIBCUBLAS_VERSION=12.8.4.1-1
+      NV_LIBCUBLAS_PACKAGE=${NV_LIBCUBLAS_PACKAGE_NAME}=${NV_LIBCUBLAS_VERSION}
+
+      NV_LIBNCCL_PACKAGE_NAME=libnccl2
+      NV_LIBNCCL_PACKAGE_VERSION=2.25.1-1
+      NCCL_VERSION=2.25.1-1
+      NV_LIBNCCL_PACKAGE=${NV_LIBNCCL_PACKAGE_NAME}=${NV_LIBNCCL_PACKAGE_VERSION}+cuda12.8
+
+      apt-get update && apt-get install -y --no-install-recommends \
+        cuda-libraries-12-8=${NV_CUDA_LIB_VERSION} \
+        ${NV_LIBNPP_PACKAGE} \
+        cuda-nvtx-12-8=${NV_NVTX_VERSION} \
+        libcusparse-12-8=${NV_LIBCUSPARSE_VERSION} \
+        ${NV_LIBCUBLAS_PACKAGE} \
+        ${NV_LIBNCCL_PACKAGE} \
+        && rm -rf /var/lib/apt/lists/*
+
+      apt-mark hold ${NV_LIBCUBLAS_PACKAGE_NAME} ${NV_LIBNCCL_PACKAGE_NAME}
+
+      # --- CUDA Devel ---
+      NV_CUDA_CUDART_DEV_VERSION=12.8.90-1
+      NV_NVML_DEV_VERSION=12.8.90-1
+      NV_LIBCUSPARSE_DEV_VERSION=12.5.8.93-1
+      NV_LIBNPP_DEV_VERSION=12.3.3.100-1
+      NV_LIBNPP_DEV_PACKAGE=libnpp-dev-12-8=${NV_LIBNPP_DEV_VERSION}
+
+      NV_LIBCUBLAS_DEV_VERSION=12.8.4.1-1
+      NV_LIBCUBLAS_DEV_PACKAGE_NAME=libcublas-dev-12-8
+      NV_LIBCUBLAS_DEV_PACKAGE=${NV_LIBCUBLAS_DEV_PACKAGE_NAME}=${NV_LIBCUBLAS_DEV_VERSION}
+
+      NV_CUDA_NSIGHT_COMPUTE_VERSION=12.8.1-1
+      NV_CUDA_NSIGHT_COMPUTE_DEV_PACKAGE=cuda-nsight-compute-12-8=${NV_CUDA_NSIGHT_COMPUTE_VERSION}
+
+      # nvprof isn't published for arm64; mirrors upstream (only amd64 is built).
+      case "$(dpkg --print-architecture)" in
+        (amd64) NV_NVPROF_VERSION=12.8.90-1
+        NV_NVPROF_DEV_PACKAGE=cuda-nvprof-12-8=${NV_NVPROF_VERSION} ;;
+        (arm64) NV_NVPROF_DEV_PACKAGE="" ;;
+      esac
+
+      NV_LIBNCCL_DEV_PACKAGE_NAME=libnccl-dev
+      NV_LIBNCCL_DEV_PACKAGE_VERSION=2.25.1-1
+      NCCL_VERSION=2.25.1-1
+      NV_LIBNCCL_DEV_PACKAGE=${NV_LIBNCCL_DEV_PACKAGE_NAME}=${NV_LIBNCCL_DEV_PACKAGE_VERSION}+cuda12.8
+
+      apt-get update && apt-get install -y --no-install-recommends \
+        cuda-cudart-dev-12-8=${NV_CUDA_CUDART_DEV_VERSION} \
+        cuda-command-line-tools-12-8=${NV_CUDA_LIB_VERSION} \
+        cuda-minimal-build-12-8=${NV_CUDA_LIB_VERSION} \
+        cuda-libraries-dev-12-8=${NV_CUDA_LIB_VERSION} \
+        cuda-nvml-dev-12-8=${NV_NVML_DEV_VERSION} \
+        ${NV_NVPROF_DEV_PACKAGE} \
+        ${NV_LIBNPP_DEV_PACKAGE} \
+        libcusparse-dev-12-8=${NV_LIBCUSPARSE_DEV_VERSION} \
+        ${NV_LIBCUBLAS_DEV_PACKAGE} \
+        ${NV_LIBNCCL_DEV_PACKAGE} \
+        ${NV_CUDA_NSIGHT_COMPUTE_DEV_PACKAGE} \
+        && rm -rf /var/lib/apt/lists/*
+
+      apt-mark hold ${NV_LIBCUBLAS_DEV_PACKAGE_NAME} ${NV_LIBNCCL_DEV_PACKAGE_NAME}
+
+      # --- Deepspeed ---
+      rm -f /usr/bin/python && ln -s /usr/bin/python3 /usr/bin/python
+
+      # Setting capabilities for sshd to bind to low-numbered ports without running as root.
+      # Same step as upstream, but it has no effect: rockcraft drops file capabilities when packing the final image.
+      # Relevant rockcraft issue: https://github.com/canonical/rockcraft/issues/683.
+      setcap CAP_NET_BIND_SERVICE=+eip /usr/sbin/sshd
+      apt remove libcap2-bin -y
+
+      # Create a non-root user for running MPI processes. Hardcoded as 1000 to match the ClusterTrainingRuntime configuration.
+      # Customization: '*' instead of useradd's default '!'. Rockcraft's run-user leaves /etc/shadow world-readable, so the
+      # workers' non-root sshd would see '!' and reject the launcher's key logins as "account is locked". '*' still disables passwords.
+      id -u mpiuser >/dev/null 2>&1 || useradd -m -u 1000 -p '*' mpiuser
+    build-packages:
+      # --- Deepspeed ---
+      - g++
+      - libopenmpi-dev
+      - python3-dev
+      - pip
+    build-environment:
+      - HOME: "/home/mpiuser"
+      - PATH: "$HOME/.local/bin:$PATH"
+    override-build: |
+      set -eux -o pipefail
+
+      # --- Deepspeed ---
+
+      # Upstream's setcap on sshd runs in override-overlay instead.
+
+      # Upstream's useradd runs in override-overlay instead; here it would only change the build machine.
+
+      # Upstream's COPY --from=mpi of the ssh configs is the mpioperator_base part.
+
+      # The build instance's ~/.local survives between packs; start clean so dropped requirements aren't shipped.
+      rm -rf "${HOME}/.local"
+
+      # Installed on the build machine (HOME=/home/mpiuser), then copied into the final rock.
+      pip install --user --upgrade --ignore-installed pip
+      pip install --user -r "${CRAFT_PROJECT_DIR}/requirements.txt"
+      mkdir -p "${CRAFT_PART_INSTALL}${HOME}" "${CRAFT_PART_INSTALL}${HOME}/.cache"
+      cp -a "${HOME}/.local" "${CRAFT_PART_INSTALL}${HOME}/"
+
+
+
+  # mpiuser (UID 1000) is the ClusterTrainingRuntime's runAsUser; it must own its home, .local and .cache.
+  non-root-user:
+    plugin: nil
+    after: [mpioperator_base, cuda_deepspeed]
+    build-environment:
+      - HOME: "/home/mpiuser"
+    override-prime: |
+      craftctl default
+      chown 1000:1000 "${CRAFT_PRIME}${HOME}"
+      chown -R 1000:1000 "${CRAFT_PRIME}${HOME}/.local" "${CRAFT_PRIME}${HOME}/.cache"
+
+
+  security-team-requirement:
+    plugin: nil
+    after: [mpioperator_base, cuda_deepspeed, non-root-user]
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/usr/share/rocks
+      (echo "# os-release" && cat /etc/os-release && echo "# dpkg-query" && \
+      dpkg-query --root=${CRAFT_PROJECT_DIR}/../bundles/ubuntu-22.04/rootfs/ -f '${db:Status-Abbrev},${binary:Package},${Version},${source:Package},${Source:Version}\n' -W) \
+      > ${CRAFT_PART_INSTALL}/usr/share/rocks/dpkg.query
