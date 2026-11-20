@@ -1,0 +1,247 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+import subprocess
+import textwrap
+
+import pytest
+
+# The ClusterTrainingRuntime runs as mpiuser rather than the rock's run-user.
+MPIUSER = "1000:1000"
+
+
+def test_rock_filename(rock_container):
+    """Test that the built rock's name/version match rockcraft.yaml."""
+    check_rock = rock_container[0]
+    assert check_rock.get_name() == "deepspeed-runtime"
+    assert check_rock.get_version() == "2.1.0-cuda12.8.1-devel"
+
+
+def test_container_is_running(rock_container):
+    """Test that the container keeps running."""
+    result = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", rock_container[1]],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "true"
+
+
+def test_non_root_user(rock_container):
+    """Test that the container runs as the non-root _daemon_ user."""
+    result = subprocess.run(
+        ["docker", "exec", rock_container[1], "id", "-u"],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "584792"
+
+
+def test_mpiuser_uid(rock_container):
+    """Test that mpiuser exists with the UID the ClusterTrainingRuntime runs as."""
+    result = subprocess.run(
+        ["docker", "exec", rock_container[1], "id", "-u", "mpiuser"],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "1000"
+
+
+@pytest.mark.parametrize(
+    "path", ["/home/mpiuser", "/home/mpiuser/.local", "/home/mpiuser/.cache"]
+)
+def test_mpiuser_home_ownership(rock_container, path):
+    """Test that mpiuser owns its home, packages and cache directories."""
+    result = subprocess.run(
+        ["docker", "exec", rock_container[1], "stat", "-c", "%u:%g", path],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == MPIUSER
+
+
+@pytest.mark.parametrize(
+    "binary",
+    [
+        "/usr/bin/python",
+        "/usr/bin/mpirun",
+        "/usr/bin/ssh",
+        "/usr/sbin/sshd",
+        "/usr/local/cuda/bin/nvcc",
+        "/home/mpiuser/.local/bin/deepspeed",
+        "/home/mpiuser/.local/bin/ds_report",
+    ],
+)
+def test_binaries(rock_container, binary):
+    """Test that expected binaries are executable by mpiuser."""
+    subprocess.run(
+        ["docker", "exec", "--user", MPIUSER, rock_container[1], "test", "-x", binary],
+        check=True,
+    )
+
+
+def test_pip_available(rock_container):
+    """Test that the Kubeflow SDK's `python -m pip` uses the upgraded pip in mpiuser's ~/.local."""
+    result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            "--user",
+            MPIUSER,
+            rock_container[1],
+            "python",
+            "-m",
+            "pip",
+            "--version",
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    # Ubuntu's pip 22.0.2 in /usr/lib/python3/dist-packages means the upgrade didn't ship.
+    assert "/home/mpiuser/.local/lib/python3.10/site-packages/pip" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "option",
+    ["port 2222", "stricthostkeychecking false", "userknownhostsfile /dev/null"],
+)
+def test_ssh_client_config(rock_container, option):
+    """
+    Test the ssh client options the MPI launcher relies on to reach workers.
+    Set in the rock's ssh client configuration.
+    """
+    result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            "--user",
+            MPIUSER,
+            rock_container[1],
+            "ssh",
+            "-G",
+            "localhost",
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    assert option in result.stdout.splitlines()
+
+
+def test_sshd_as_mpiuser(rock_container):
+    """
+    Test that a worker's sshd, started as in the ClusterTrainingRuntime,
+    accepts the launcher's key login.
+    """
+    # Stand-in for the Secret Trainer mounts at ~/.ssh: one key pair is both
+    # sshd's HostKey (set in ~/.sshd_config) and the launcher's login key.
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "--user",
+            MPIUSER,
+            rock_container[1],
+            "bash",
+            "-c",
+            textwrap.dedent(
+                """\
+                set -eu
+                mkdir -p ~/.ssh
+                ssh-keygen -q -t rsa -N "" -f ~/.ssh/id_rsa
+                cp ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys
+                """
+            ),
+        ],
+        check=True,
+    )
+
+    # Exact command and args of the runtime's node container. -D keeps sshd in
+    # the foreground (it is the pod's main process), so the exec is detached.
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "--detach",
+            "--user",
+            MPIUSER,
+            rock_container[1],
+            "/usr/sbin/sshd",
+            "-De",
+            "-f",
+            "/home/mpiuser/.sshd_config",
+        ],
+        check=True,
+    )
+
+    # Log in as the MPI launcher would. BatchMode fails instead of hanging on a
+    # password prompt; ConnectionAttempts retries until the detached sshd
+    # is listening.
+    result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            "--user",
+            MPIUSER,
+            rock_container[1],
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectionAttempts=5",
+            "localhost",
+            "whoami",
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    # sshd rejects the key with "account is locked" if useradd's default '!'
+    # password is back (see the useradd comment in rockcraft.yaml).
+    assert result.stdout.strip() == "mpiuser"
+
+def test_security_manifest(rock_container):
+    """Test that the dpkg/os-release manifest required by the security team is present."""
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            rock_container[1],
+            "test",
+            "-s",
+            "/usr/share/rocks/dpkg.query",
+        ],
+        check=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "env_var,expected",
+    [
+        ("HOME", "/home/mpiuser"),
+        (
+            "PATH",
+            "/home/mpiuser/.local/bin:/usr/local/cuda/bin:/usr/local/sbin:"
+            "/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        ),
+        ("LD_LIBRARY_PATH", "/usr/local/cuda/lib64"),
+        ("LIBRARY_PATH", "/usr/local/cuda/lib64/stubs"),
+        ("CUDA_VERSION", "12.8.1"),
+        ("NCCL_VERSION", "2.25.1-1"),
+        ("NVIDIA_VISIBLE_DEVICES", "all"),
+        ("NVIDIA_DRIVER_CAPABILITIES", "compute,utility"),
+    ],
+)
+def test_environment_variables(rock_container, env_var, expected):
+    """Test env vars relied on by the NVIDIA runtime hooks and CUDA builds are set on the image."""
+    result = subprocess.run(
+        ["docker", "exec", rock_container[1], "printenv", env_var],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == expected
