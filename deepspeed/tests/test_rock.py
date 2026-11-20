@@ -199,6 +199,7 @@ def test_sshd_as_mpiuser(rock_container):
         stdout=subprocess.PIPE,
         text=True,
         check=True,
+        timeout=60,
     )
     # sshd rejects the key with "account is locked" if useradd's default '!'
     # password is back (see the useradd comment in rockcraft.yaml).

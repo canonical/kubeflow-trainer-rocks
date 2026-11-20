@@ -117,4 +117,5 @@ def test_mpirun_mpi4py(rock_container):
             ),
         ],
         check=True,
+        timeout=60,
     )
