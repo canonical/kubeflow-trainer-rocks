@@ -16,7 +16,7 @@ optree==0.16.0
 packaging==25.0
 psutil==7.0.0
 pyyaml==6.0.2
-requests==2.32.3
+requests==2.33.0
 # issue on Windows after >= 75.8.2 - https://github.com/pytorch/pytorch/issues/148877
 setuptools==75.8.2
 sympy==1.14.0
