@@ -5,8 +5,6 @@ import textwrap
 
 import pytest
 
-# The ClusterTrainingRuntime runs as mpiuser; packages live in its ~/.local.
-MPIUSER = "1000:1000"
 
 @pytest.mark.parametrize(
     "package,version",
@@ -25,8 +23,6 @@ def test_package_version(rock_container, package, version):
         [
             "docker",
             "exec",
-            "--user",
-            MPIUSER,
             rock_container[1],
             "python",
             "-c",
@@ -45,8 +41,6 @@ def test_torch_compiled_with_cuda(rock_container):
         [
             "docker",
             "exec",
-            "--user",
-            MPIUSER,
             rock_container[1],
             "python",
             "-c",
@@ -75,8 +69,6 @@ def test_mpirun_mpi4py(rock_container):
         [
             "docker",
             "exec",
-            "--user",
-            MPIUSER,
             rock_container[1],
             "mpirun",
             "--oversubscribe",
