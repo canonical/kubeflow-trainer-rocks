@@ -18,7 +18,7 @@ psutil==7.0.0
 pyyaml==6.0.2
 requests==2.32.3
 # issue on Windows after >= 75.8.2 - https://github.com/pytorch/pytorch/issues/148877
-setuptools==75.8.2
+setuptools==84.1.0
 sympy==1.14.0
 types-dataclasses==0.6.6
 typing-extensions==4.14.0
