@@ -42,6 +42,10 @@ environment:
 parts:
   mpioperator_base:
     plugin: nil
+    source: https://github.com/kubeflow/mpi-operator
+    source-type: git
+    source-tag: v0.6.0
+    source-depth: 1
     build-packages:
       - openssh-server
       - openssh-client
@@ -73,7 +77,7 @@ parts:
 
       # Customization: mpiuser is created in non-root-user part's overlay script, as in the upstream DeepSpeed image.
 
-      cp ${CRAFT_PROJECT_DIR}/sshd_config ${CRAFT_PART_INSTALL}${MPI_HOME}/.sshd_config
+      cp ${CRAFT_PART_SRC}/build/base/sshd_config ${CRAFT_PART_INSTALL}${MPI_HOME}/.sshd_config
 
       echo "Port ${PORT}" >> ${CRAFT_PART_INSTALL}${MPI_HOME}/.sshd_config
 
@@ -209,6 +213,10 @@ parts:
       setcap CAP_NET_BIND_SERVICE=+eip /usr/sbin/sshd
       apt remove libcap2-bin -y
 
+    source: https://github.com/kubeflow/trainer
+    source-type: git
+    source-tag: v2.1.0
+    source-depth: 1
     build-packages:
       # --- Deepspeed ---
       - g++
@@ -234,7 +242,7 @@ parts:
 
       # Installed on the build machine (HOME=/home/mpiuser), then copied into the final rock.
       pip install --user --upgrade --ignore-installed pip
-      pip install --user -r "${CRAFT_PROJECT_DIR}/requirements.txt"
+      pip install --user -r "${CRAFT_PART_SRC}/cmd/runtimes/deepspeed/requirements.txt"
       mkdir -p "${CRAFT_PART_INSTALL}${HOME}" "${CRAFT_PART_INSTALL}${HOME}/.cache"
       cp -a "${HOME}/.local" "${CRAFT_PART_INSTALL}${HOME}/"
 
