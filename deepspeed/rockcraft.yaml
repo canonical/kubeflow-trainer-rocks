@@ -209,7 +209,7 @@ parts:
 
       # Setting capabilities for sshd to bind to low-numbered ports without running as root.
       # Same step as upstream, but it has no effect: rockcraft drops file capabilities when packing the final image.
-      # Relevant rockcraft issue: https://github.com/canonical/rockcraft/issues/683.
+      # # TODO: no effect until rockcraft keeps file capabilities: https://github.com/canonical/rockcraft/issues/683
       setcap CAP_NET_BIND_SERVICE=+eip /usr/sbin/sshd
       apt remove libcap2-bin -y
 
