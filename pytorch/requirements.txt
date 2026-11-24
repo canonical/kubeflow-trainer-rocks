@@ -5,7 +5,7 @@ astunparse==1.6.3
 cmake==4.0.2
 expecttest==0.3.0
 filelock==3.18.0
-fsspec==2025.5.1
+fsspec==2026.6.0
 hypothesis==6.135.0
 jinja2==3.1.6
 lintrunner==0.12.7 ; platform_machine != "s390x"
