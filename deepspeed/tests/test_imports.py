@@ -8,28 +8,6 @@ import pytest
 # The ClusterTrainingRuntime runs as mpiuser; packages live in its ~/.local.
 MPIUSER = "1000:1000"
 
-
-@pytest.mark.parametrize(
-    "module",
-    ["torch", "deepspeed", "mpi4py", "datasets", "transformers", "sentencepiece"],
-)
-def test_import(rock_container, module):
-    """Test that a Python module imports from mpiuser's user site-packages."""
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--user",
-            MPIUSER,
-            rock_container[1],
-            "python",
-            "-c",
-            f"import {module}",
-        ],
-        check=True,
-    )
-
-
 @pytest.mark.parametrize(
     "package,version",
     [

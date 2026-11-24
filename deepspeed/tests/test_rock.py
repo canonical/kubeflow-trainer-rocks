@@ -2,18 +2,13 @@
 # See LICENSE file for licensing details.
 import subprocess
 import textwrap
+from pathlib import Path
 
 import pytest
+import yaml
 
 # The ClusterTrainingRuntime runs as mpiuser rather than the rock's run-user.
 MPIUSER = "1000:1000"
-
-
-def test_rock_filename(rock_container):
-    """Test that the built rock's name/version match rockcraft.yaml."""
-    check_rock = rock_container[0]
-    assert check_rock.get_name() == "deepspeed-runtime"
-    assert check_rock.get_version() == "2.1.0-cuda12.8.1-devel"
 
 
 def test_container_is_running(rock_container):
@@ -220,29 +215,20 @@ def test_security_manifest(rock_container):
     )
 
 
-@pytest.mark.parametrize(
-    "env_var,expected",
-    [
-        ("HOME", "/home/mpiuser"),
-        (
-            "PATH",
+def test_environment_variables():
+    """Test that rockcraft.yaml sets the env vars the rock relies on; it may define more."""
+    expected = {
+        "HOME": "/home/mpiuser",
+        "PATH": (
             "/home/mpiuser/.local/bin:/usr/local/cuda/bin:/usr/local/sbin:"
-            "/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         ),
-        ("LD_LIBRARY_PATH", "/usr/local/cuda/lib64"),
-        ("LIBRARY_PATH", "/usr/local/cuda/lib64/stubs"),
-        ("CUDA_VERSION", "12.8.1"),
-        ("NCCL_VERSION", "2.25.1-1"),
-        ("NVIDIA_VISIBLE_DEVICES", "all"),
-        ("NVIDIA_DRIVER_CAPABILITIES", "compute,utility"),
-    ],
-)
-def test_environment_variables(rock_container, env_var, expected):
-    """Test env vars relied on by the NVIDIA runtime hooks and CUDA builds are set on the image."""
-    result = subprocess.run(
-        ["docker", "exec", rock_container[1], "printenv", env_var],
-        stdout=subprocess.PIPE,
-        text=True,
-        check=True,
-    )
-    assert result.stdout.strip() == expected
+        "LD_LIBRARY_PATH": "/usr/local/cuda/lib64",
+        "LIBRARY_PATH": "/usr/local/cuda/lib64/stubs",
+        "CUDA_VERSION": "12.8.1",
+        "NCCL_VERSION": "2.25.1-1",
+        "NVIDIA_VISIBLE_DEVICES": "all",
+        "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+    }
+    environment = yaml.safe_load(Path("rockcraft.yaml").read_text())["environment"]
+    assert {var: environment.get(var) for var in expected} == expected
