@@ -9,7 +9,7 @@ name: deepspeed-runtime
 summary: DeepSpeed distributed runtime for NVIDIA GPUs
 description: |
   A DeepSpeed runtime environment for distributed training on NVIDIA GPUs.
-version: "2.1.0-cuda12.8.1-devel"
+version: 2.1.0-cuda12.8.1-devel
 license: Apache-2.0
 base: ubuntu@22.04
 # Default for standalone runs; the ClusterTrainingRuntime runs as UID 1000 (mpiuser).
@@ -94,7 +94,7 @@ parts:
       # --- Deepspeed ---
       - openssh-server
       - openssh-client
-      - libcap2-bin  # only for setcap, removed afterwards
+      - libcap2-bin  # purged after setcap
       - g++
       - libopenmpi-dev
       - python3-dev
@@ -242,8 +242,6 @@ parts:
       mkdir -p "${CRAFT_PART_INSTALL}${HOME}" "${CRAFT_PART_INSTALL}${HOME}/.cache"
       cp -a "${HOME}/.local" "${CRAFT_PART_INSTALL}${HOME}/"
 
-
-
   # mpiuser (UID 1000) is the ClusterTrainingRuntime's runAsUser; it must own its home, .local and .cache.
   non-root-user:
     plugin: nil
@@ -254,7 +252,6 @@ parts:
       craftctl default
       chown 1000:1000 "${CRAFT_PRIME}${HOME}"
       chown -R 1000:1000 "${CRAFT_PRIME}${HOME}/.local" "${CRAFT_PRIME}${HOME}/.cache"
-
 
   security-team-requirement:
     plugin: nil
