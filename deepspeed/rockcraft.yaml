@@ -71,7 +71,7 @@ parts:
           && sed -i "s/#\(StrictModes \).*/\1no/g" ${SSH_DIR}/sshd_config \
           && sed -i "s/#\(Port \).*/\1${PORT}/g" ${SSH_DIR}/sshd_config
 
-      # Customization: mpiuser is created in cuda_deepspeed's overlay, as in the upstream DeepSpeed image.
+      # Customization: mpiuser is created in non-root-user part's overlay script, as in the upstream DeepSpeed image.
 
       cp ${CRAFT_PROJECT_DIR}/sshd_config ${CRAFT_PART_INSTALL}${MPI_HOME}/.sshd_config
 
@@ -209,10 +209,6 @@ parts:
       setcap CAP_NET_BIND_SERVICE=+eip /usr/sbin/sshd
       apt remove libcap2-bin -y
 
-      # Create a non-root user for running MPI processes. Hardcoded as 1000 to match the ClusterTrainingRuntime configuration.
-      # Customization: '*' instead of useradd's default '!'. Rockcraft's run-user leaves /etc/shadow world-readable, so the
-      # workers' non-root sshd would see '!' and reject the launcher's key logins as "account is locked". '*' still disables passwords.
-      id -u mpiuser >/dev/null 2>&1 || useradd -m -u 1000 -p '*' mpiuser
     build-packages:
       # --- Deepspeed ---
       - g++
@@ -229,7 +225,7 @@ parts:
 
       # Upstream's setcap on sshd runs in override-overlay instead.
 
-      # Upstream's useradd runs in override-overlay instead; here it would only change the build machine.
+      # Upstream's useradd runs in non-root-user part's overlay script instead; here it would only change the build machine.
 
       # Upstream's COPY --from=mpi of the ssh configs is the mpioperator_base part.
 
@@ -248,8 +244,14 @@ parts:
     after: [mpioperator_base, cuda_deepspeed]
     build-environment:
       - HOME: "/home/mpiuser"
+    overlay-script: |
+      # Create mpiuser for the MPI processes; UID 1000 is hardcoded to match the ClusterTrainingRuntime's runAsUser.
+      # Customization: password '*' instead of useradd's default '!'. Rockcraft's run-user leaves /etc/shadow
+      # world-readable, so the workers' non-root sshd sees '!' as a locked account and rejects the launcher's
+      # key logins ("account is locked"). '*' isn't treated as locked and still disables password login.
+      useradd -R "${CRAFT_OVERLAY}" -m -u 1000 -p '*' mpiuser
+
     override-prime: |
-      craftctl default
       chown 1000:1000 "${CRAFT_PRIME}${HOME}"
       chown -R 1000:1000 "${CRAFT_PRIME}${HOME}/.local" "${CRAFT_PRIME}${HOME}/.cache"
 
