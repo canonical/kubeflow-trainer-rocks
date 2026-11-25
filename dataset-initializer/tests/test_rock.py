@@ -20,7 +20,7 @@ def test_rock():
             "--rm",
             LOCAL_ROCK_IMAGE,
             "exec",
-            "python3.11",
+            "python3",
             "-c",
             "import pkg.initializers.dataset",
         ],

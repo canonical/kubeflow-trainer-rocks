@@ -1,15 +1,15 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Source https://github.com/kubeflow/trainer/blob/v2.1.0/cmd/initializers/dataset/Dockerfile
+# Source https://github.com/kubeflow/trainer/blob/v2.4.0/cmd/initializers/dataset/Dockerfile
 name: dataset-initializer
 summary: An image for Kubeflow Trainer dataset initializer
 description: |
   Dataset initializer component for Kubeflow Trainer.
   This image runs the dataset initializer Python module used by Trainer jobs.
-version: "2.1.0"
+version: "2.4.0"
 license: Apache-2.0
-base: ubuntu@22.04
+base: ubuntu@26.04
 
 platforms:
   amd64:
@@ -17,11 +17,13 @@ platforms:
 services:
   dataset-initializer:
     override: merge
-    command: "python3.11 -m pkg.initializers.dataset"
+    command: "/app/.venv/bin/python -m pkg.initializers.dataset"
     startup: enabled
     working-dir: /app
-    environment:
-      PYTHONPATH: /app
+
+environment:
+  PYTHONPATH: /app
+  PATH: /app/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 run-user: _daemon_
 
@@ -30,27 +32,37 @@ parts:
     plugin: nil
     source: https://github.com/kubeflow/trainer
     source-type: git
-    source-tag: v2.1.0
+    source-tag: v2.4.0
     source-depth: 1
     build-packages:
-      - python3.11
-      - python3-pip
+      - python3-venv
     stage-packages:
-      - python3.11
+      - python3.14
       - ca-certificates
+    build-environment:
+      - UV_PYTHON: "/usr/bin/python3.14"
+      - UV_PYTHON_DOWNLOADS: "never"
+      - UV_LINK_MODE: "copy"
     override-build: |
-      mkdir -p ${CRAFT_PART_INSTALL}/app
-      PYTHON_VERSION=$(/usr/bin/python3.11 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-      DIST_PACKAGES_DIR=${CRAFT_PART_INSTALL}/usr/local/lib/python${PYTHON_VERSION}/dist-packages
-      mkdir -p ${DIST_PACKAGES_DIR}
+      set -eux -o pipefail
 
-      cp ${CRAFT_PART_SRC}/cmd/initializers/dataset/requirements.txt ${CRAFT_PART_INSTALL}/app/
-      cp -r ${CRAFT_PART_SRC}/pkg ${CRAFT_PART_INSTALL}/app/
-      cp -r ${CRAFT_PART_SRC}/pkg ${DIST_PACKAGES_DIR}/
+      # Install uv 0.7, as upstream copies it from ghcr.io/astral-sh/uv:0.7
+      python3 -m venv --clear ${CRAFT_PART_BUILD}/uv-venv
+      ${CRAFT_PART_BUILD}/uv-venv/bin/pip install --no-cache-dir "uv>=0.7,<0.8"
+      UV=${CRAFT_PART_BUILD}/uv-venv/bin/uv
+      export UV_CACHE_DIR=${CRAFT_PART_BUILD}/uv-cache
 
-      /usr/bin/python3.11 -m pip install --no-cache-dir \
-        --requirement ${CRAFT_PART_INSTALL}/app/requirements.txt \
-        --target ${DIST_PACKAGES_DIR}
+      # Built in place at its final path: uv embeds absolute paths in the venv,
+      # so building elsewhere and copying later would break it.
+      rm -rf /app
+      mkdir -p /app/pkg
+      cp ${CRAFT_PART_SRC}/cmd/initializers/dataset/pyproject.toml /app/
+      cp ${CRAFT_PART_SRC}/cmd/initializers/dataset/uv.lock /app/
+      cp -r ${CRAFT_PART_SRC}/pkg/initializers /app/pkg/
+
+      cd /app
+      ${UV} sync --locked --no-dev
+      cp -a /app ${CRAFT_PART_INSTALL}/app
 
   security-team-requirement:
     after:
