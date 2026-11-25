@@ -20,9 +20,10 @@ services:
     command: "/app/.venv/bin/python -m pkg.initializers.dataset"
     startup: enabled
     working-dir: /app
-    environment:
-      PYTHONPATH: /app
-      PATH: /app/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+environment:
+  PYTHONPATH: /app
+  PATH: /app/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 run-user: _daemon_
 
@@ -61,15 +62,7 @@ parts:
 
       cd /app
       ${UV} sync --locked --no-dev
-
-      # Make /app importable from the venv regardless of the working directory
-      echo /app > /app/.venv/lib/python3.14/site-packages/dataset-initializer.pth
       cp -a /app ${CRAFT_PART_INSTALL}/app
-
-      # Make plain `python3` (e.g. `pebble exec python3`) use the app venv
-      mkdir -p ${CRAFT_PART_INSTALL}/usr/bin
-      printf '#!/bin/sh\nexec /app/.venv/bin/python "$@"\n' > ${CRAFT_PART_INSTALL}/usr/bin/python3
-      chmod 755 ${CRAFT_PART_INSTALL}/usr/bin/python3
 
   security-team-requirement:
     after:
