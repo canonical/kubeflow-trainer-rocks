@@ -10,6 +10,7 @@ import yaml
 # The ClusterTrainingRuntime runs as mpiuser rather than the rock's run-user.
 MPI_USER_ID = "1000"
 
+
 def test_container_is_running(rock_container):
     """Test that the container keeps running."""
     result = subprocess.run(
@@ -177,6 +178,7 @@ def test_sshd_as_mpiuser(rock_container):
     # sshd rejects the key with "account is locked" if useradd's default '!'
     # password is back (see the useradd comment in rockcraft.yaml).
     assert result.stdout.strip() == "mpiuser"
+
 
 def test_security_manifest(rock_container):
     """Test that the dpkg/os-release manifest required by the security team is present."""

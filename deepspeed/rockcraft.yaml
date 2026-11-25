@@ -39,6 +39,7 @@ environment:
 
   # --- Deepspeed ---
   HOME: /home/mpiuser
+
 parts:
   mpioperator_base:
     plugin: nil
@@ -98,7 +99,7 @@ parts:
       # --- Deepspeed ---
       - openssh-server
       - openssh-client
-      - libcap2-bin  # purged after setcap
+      - libcap2-bin # purged after setcap
       - g++
       - libopenmpi-dev
       - python3-dev
@@ -118,7 +119,6 @@ parts:
       esac
 
       NV_CUDA_CUDART_VERSION="12.8.90-1"
-
 
       # Install the NVIDIA CUDA keyring and set up the repository.
       curl -fsSLO "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${NVARCH}/cuda-keyring_1.1-1_all.deb"
@@ -209,7 +209,7 @@ parts:
 
       # Setting capabilities for sshd to bind to low-numbered ports without running as root.
       # Same step as upstream, but it has no effect: rockcraft drops file capabilities when packing the final image.
-      # # TODO: no effect until rockcraft keeps file capabilities: https://github.com/canonical/rockcraft/issues/683
+      # TODO: no effect until rockcraft keeps file capabilities: https://github.com/canonical/rockcraft/issues/683
       setcap CAP_NET_BIND_SERVICE=+eip /usr/sbin/sshd
       apt remove libcap2-bin -y
 
