@@ -6,7 +6,7 @@ description: |
   This image runs the model initializer Python module used by Trainer jobs.
 version: "2.4.0"
 license: Apache-2.0
-base: ubuntu@22.04
+base: ubuntu@26.04
 
 platforms:
   amd64:
@@ -23,11 +23,6 @@ services:
 
 run-user: _daemon_
 
-package-repositories:
-  - type: apt
-    ppa: deadsnakes/ppa
-    priority: always
-
 parts:
   model-initializer:
     plugin: nil
@@ -36,37 +31,42 @@ parts:
     source-tag: v2.4.0
     source-depth: 1
     build-packages:
-      - python3.14
-      - python3-pip
+      - python3-venv
     stage-packages:
       - python3.14
       - ca-certificates
     build-environment:
-      - UV_PYTHON: /usr/bin/python3.14
-      - UV_PYTHON_DOWNLOADS: never
-      - UV_LINK_MODE: copy
+      - UV_PYTHON: "/usr/bin/python3.14"
+      - UV_PYTHON_DOWNLOADS: "never"
+      - UV_LINK_MODE: "copy"
     override-build: |
-      mkdir -p ${CRAFT_PART_INSTALL}/app
-      PYTHON_VERSION=$(/usr/bin/python3.14 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-      DIST_PACKAGES_DIR=${CRAFT_PART_INSTALL}/usr/local/lib/python${PYTHON_VERSION}/dist-packages
-      mkdir -p ${DIST_PACKAGES_DIR}
-
-      cp ${CRAFT_PART_SRC}/cmd/initializers/model/pyproject.toml ${CRAFT_PART_INSTALL}/app/
-      cp ${CRAFT_PART_SRC}/cmd/initializers/model/uv.lock ${CRAFT_PART_INSTALL}/app/
-      cp -r ${CRAFT_PART_SRC}/pkg ${CRAFT_PART_INSTALL}/app/
+      set -eux -o pipefail
 
       # Install uv 0.7, as upstream copies it from ghcr.io/astral-sh/uv:0.7
-      python3 -m pip install --no-cache-dir "uv==0.7.*"
+      python3 -m venv --clear ${CRAFT_PART_BUILD}/uv-venv
+      ${CRAFT_PART_BUILD}/uv-venv/bin/pip install --no-cache-dir "uv>=0.7,<0.8"
+      UV=${CRAFT_PART_BUILD}/uv-venv/bin/uv
+      export UV_CACHE_DIR=${CRAFT_PART_BUILD}/uv-cache
 
-      cd ${CRAFT_PART_INSTALL}/app
-      uv venv --relocatable --python /usr/bin/python3.14 .venv
-      uv sync --locked --no-dev
+      # Built in place at its final path: uv embeds absolute paths in the venv,
+      # so building elsewhere and copying later would break it.
+      rm -rf /app
+      mkdir -p /app/pkg
+      cp ${CRAFT_PART_SRC}/cmd/initializers/model/pyproject.toml /app/
+      cp ${CRAFT_PART_SRC}/cmd/initializers/model/uv.lock /app/
+      cp -r ${CRAFT_PART_SRC}/pkg/initializers /app/pkg/
 
-      # Expose the app and its venv to the system interpreter as `python3`,
-      # so `pebble exec python3 ...` in the rock can import pkg.initializers.model
-      printf '%s\n' /app /app/.venv/lib/python${PYTHON_VERSION}/site-packages > ${DIST_PACKAGES_DIR}/model-initializer.pth
+      cd /app
+      ${UV} sync --locked --no-dev
+
+      # Make /app importable from the venv regardless of the working directory
+      echo /app > /app/.venv/lib/python3.14/site-packages/model-initializer.pth
+      cp -a /app ${CRAFT_PART_INSTALL}/app
+
+      # Make plain `python3` (e.g. `pebble exec python3`) use the app venv
       mkdir -p ${CRAFT_PART_INSTALL}/usr/bin
-      ln -sf python${PYTHON_VERSION} ${CRAFT_PART_INSTALL}/usr/bin/python3
+      printf '#!/bin/sh\nexec /app/.venv/bin/python "$@"\n' > ${CRAFT_PART_INSTALL}/usr/bin/python3
+      chmod 755 ${CRAFT_PART_INSTALL}/usr/bin/python3
 
   security-team-requirement:
     after:
