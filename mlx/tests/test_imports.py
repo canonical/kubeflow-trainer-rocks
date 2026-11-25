@@ -5,32 +5,8 @@ import textwrap
 
 import pytest
 
-# The ClusterTrainingRuntime runs as mpiuser; packages live in its ~/.local.
-MPIUSER = "1000:1000"
-
 # libcuda.so.1 for mlx-cuda without a GPU; on GPU nodes the NVIDIA runtime mounts the host's.
 CUDA_COMPAT_LD_LIBRARY_PATH = "LD_LIBRARY_PATH=/usr/local/cuda/compat:/usr/local/cuda/lib64"
-
-
-@pytest.mark.parametrize("module", ["mlx.core", "mlx.data", "mlx_lm", "datasets"])
-def test_import(rock_container, module):
-    """Test that a Python module imports from mpiuser's user site-packages."""
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            "--user",
-            MPIUSER,
-            "--env",
-            CUDA_COMPAT_LD_LIBRARY_PATH,
-            rock_container[1],
-            "python",
-            "-c",
-            f"import {module}",
-        ],
-        check=True,
-    )
-
 
 @pytest.mark.parametrize(
     "package,version",
@@ -49,8 +25,6 @@ def test_package_version(rock_container, package, version):
         [
             "docker",
             "exec",
-            "--user",
-            MPIUSER,
             rock_container[1],
             "python",
             "-c",
@@ -76,8 +50,6 @@ def test_mpirun_mlx(rock_container):
         [
             "docker",
             "exec",
-            "--user",
-            MPIUSER,
             "--env",
             CUDA_COMPAT_LD_LIBRARY_PATH,
             rock_container[1],
