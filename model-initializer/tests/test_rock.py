@@ -11,8 +11,9 @@ import pytest
 from charmed_kubeflow_chisme.rock import CheckRock
 
 
-def test_rock():
-    """Test rock."""
+@pytest.mark.parametrize("module", ["pkg.initializers.model", "huggingface_hub", "opendal"])
+def test_rock(module):
+    """Test that the venv interpreter can import the initializer and its dependencies."""
     check_rock = CheckRock("rockcraft.yaml")
     rock_image = check_rock.get_name()
     rock_version = check_rock.get_version()
@@ -25,9 +26,9 @@ def test_rock():
             "--rm",
             LOCAL_ROCK_IMAGE,
             "exec",
-            "python3",
+            "/app/.venv/bin/python",
             "-c",
-            "import pkg.initializers.model",
+            f"import {module}",
         ],
         check=True,
     )
