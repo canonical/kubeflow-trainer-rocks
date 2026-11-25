@@ -6,7 +6,7 @@ description: |
   distributed training of machine learning (ML) models created with various ML frameworks.
 version: "2.4.0"
 license: Apache-2.0
-base: ubuntu@22.04
+base: ubuntu@26.04
 
 platforms:
   amd64:
