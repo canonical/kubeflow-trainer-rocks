@@ -9,7 +9,7 @@ description: |
   This image runs the dataset initializer Python module used by Trainer jobs.
 version: "2.4.0"
 license: Apache-2.0
-base: ubuntu@22.04
+base: ubuntu@26.04
 
 platforms:
   amd64:
@@ -26,11 +26,6 @@ services:
 
 run-user: _daemon_
 
-package-repositories:
-  - type: apt
-    ppa: deadsnakes/ppa
-    priority: always
-
 parts:
   dataset-initializer:
     plugin: nil
@@ -39,33 +34,42 @@ parts:
     source-tag: v2.4.0
     source-depth: 1
     build-packages:
-      - python3.14
-      - python3.14-venv
+      - python3-venv
     stage-packages:
       - python3.14
       - ca-certificates
+    build-environment:
+      - UV_PYTHON: "/usr/bin/python3.14"
+      - UV_PYTHON_DOWNLOADS: "never"
+      - UV_LINK_MODE: "copy"
     override-build: |
-      mkdir -p ${CRAFT_PART_INSTALL}/app
+      set -eux -o pipefail
 
       # Install uv 0.7, as upstream copies it from ghcr.io/astral-sh/uv:0.7
-      /usr/bin/python3.14 -m venv ${CRAFT_PART_BUILD}/uv-venv
+      python3 -m venv --clear ${CRAFT_PART_BUILD}/uv-venv
       ${CRAFT_PART_BUILD}/uv-venv/bin/pip install --no-cache-dir "uv>=0.7,<0.8"
       UV=${CRAFT_PART_BUILD}/uv-venv/bin/uv
+      export UV_CACHE_DIR=${CRAFT_PART_BUILD}/uv-cache
 
-      cp ${CRAFT_PART_SRC}/cmd/initializers/dataset/pyproject.toml ${CRAFT_PART_INSTALL}/app/
-      cp ${CRAFT_PART_SRC}/cmd/initializers/dataset/uv.lock ${CRAFT_PART_INSTALL}/app/
-      cp -r ${CRAFT_PART_SRC}/pkg ${CRAFT_PART_INSTALL}/app/
+      # Built in place at its final path: uv embeds absolute paths in the venv,
+      # so building elsewhere and copying later would break it.
+      rm -rf /app
+      mkdir -p /app/pkg
+      cp ${CRAFT_PART_SRC}/cmd/initializers/dataset/pyproject.toml /app/
+      cp ${CRAFT_PART_SRC}/cmd/initializers/dataset/uv.lock /app/
+      cp -r ${CRAFT_PART_SRC}/pkg/initializers /app/pkg/
 
-      cd ${CRAFT_PART_INSTALL}/app
-      UV_PYTHON=/usr/bin/python3.14 UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy \
-        UV_CACHE_DIR=${CRAFT_PART_BUILD}/uv-cache \
-        ${UV} sync --locked --no-dev
+      cd /app
+      ${UV} sync --locked --no-dev
 
-      # Make plain `python3` (e.g. `pebble exec python3`) use Python 3.14 and see /app and the uv venv
-      ln -sf python3.14 ${CRAFT_PART_INSTALL}/usr/bin/python3
-      DIST_PACKAGES_DIR=${CRAFT_PART_INSTALL}/usr/local/lib/python3.14/dist-packages
-      mkdir -p "${DIST_PACKAGES_DIR}"
-      printf '%s\n' '/app' 'import site; site.addsitedir("/app/.venv/lib/python3.14/site-packages")' > ${DIST_PACKAGES_DIR}/dataset-initializer.pth
+      # Make /app importable from the venv regardless of the working directory
+      echo /app > /app/.venv/lib/python3.14/site-packages/dataset-initializer.pth
+      cp -a /app ${CRAFT_PART_INSTALL}/app
+
+      # Make plain `python3` (e.g. `pebble exec python3`) use the app venv
+      mkdir -p ${CRAFT_PART_INSTALL}/usr/bin
+      printf '#!/bin/sh\nexec /app/.venv/bin/python "$@"\n' > ${CRAFT_PART_INSTALL}/usr/bin/python3
+      chmod 755 ${CRAFT_PART_INSTALL}/usr/bin/python3
 
   security-team-requirement:
     after:
