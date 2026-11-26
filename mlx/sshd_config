@@ -1,5 +1,0 @@
-# From upstream: https://github.com/kubeflow/mpi-operator/blob/v0.6.0/build/base/sshd_config
-
-PidFile /home/mpiuser/sshd.pid
-HostKey /home/mpiuser/.ssh/id_rsa
-StrictModes no
