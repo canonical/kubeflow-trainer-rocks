@@ -20,7 +20,7 @@ CUDA_COMPAT_LD_LIBRARY_PATH = "LD_LIBRARY_PATH=/usr/local/cuda/compat:/usr/local
     ],
 )
 def test_package_version(rock_container, package, version):
-    """Test installed package versions match the pins in requirements.txt."""
+    """Test installed package versions match the pins in upstream requirements.txt."""
     result = subprocess.run(
         [
             "docker",

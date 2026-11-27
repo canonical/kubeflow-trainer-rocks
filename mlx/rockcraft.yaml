@@ -1,15 +1,14 @@
 # Based on https://github.com/kubeflow/trainer/blob/v2.1.0/cmd/runtimes/mlx/Dockerfile
-# Underlying images:
-# MPI Base: https://github.com/kubeflow/mpi-operator/blob/v0.6.0/build/base/Dockerfile
-# CUDA devel: https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/devel/Dockerfile?ref_type=heads
-# CUDA runtime: https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/runtime/Dockerfile?ref_type=heads
-# CUDA base: https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/base/Dockerfile?ref_type=heads
+# Based on https://github.com/kubeflow/mpi-operator/blob/v0.6.0/build/base/Dockerfile
+# Based on https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/devel/Dockerfile?ref_type=heads
+# Based on https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/runtime/Dockerfile?ref_type=heads
+# Based on https://gitlab.com/nvidia/container-images/cuda/-/blob/master/dist/end-of-life/12.8.1/ubuntu2204/base/Dockerfile?ref_type=heads
 
 name: mlx-runtime
 summary: MLX distributed runtime for NVIDIA GPUs
 description: |
   An MLX runtime environment for distributed training on NVIDIA GPUs.
-version: "2.1.0-cuda12.8.1-devel"
+version: 2.1.0-cuda12.8.1-devel
 license: Apache-2.0
 base: ubuntu@22.04
 # Default for standalone runs; the ClusterTrainingRuntime runs as UID 1000 (mpiuser).
@@ -37,8 +36,9 @@ environment:
   LIBRARY_PATH: "/usr/local/cuda/lib64/stubs"
   NCCL_VERSION: "2.25.1-1"
 
-  # --- Deepspeed ---
+  # --- MLX ---
   HOME: /home/mpiuser
+
 parts:
   mpioperator_base:
     plugin: nil
@@ -57,7 +57,7 @@ parts:
 
       # Customization: skipped upstream's mkdir /var/run/sshd: only needed when sshd runs as root.
 
-      # Customization: skipped upstream's setcap here: the MPI base's sshd isn't copied into the DeepSpeed image.
+      # Customization: skipped upstream's setcap here: the MPI base's sshd isn't copied into the MLX image.
 
       # Edit copies: the build instance's /etc persists across reruns, $CRAFT_PART_INSTALL doesn't.
       SSH_DIR="${CRAFT_PART_INSTALL}/etc/ssh"
@@ -98,7 +98,7 @@ parts:
       # --- MLX ---
       - openssh-server
       - openssh-client
-      - libcap2-bin  # purged after setcap
+      - libcap2-bin # purged after setcap
       - g++
       - libopenmpi-dev
       - libblas-dev
@@ -121,7 +121,6 @@ parts:
       esac
 
       NV_CUDA_CUDART_VERSION="12.8.90-1"
-
 
       # Install the NVIDIA CUDA keyring and set up the repository.
       curl -fsSLO "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/${NVARCH}/cuda-keyring_1.1-1_all.deb"
@@ -245,7 +244,7 @@ parts:
 
       # Installed on the build machine (HOME=/home/mpiuser), then copied into the final rock.
       pip install --user --upgrade --ignore-installed pip
-      pip install --user -r "${CRAFT_PART_SRC}/cmd/runtimes/deepspeed/requirements.txt"
+      pip install --user -r "${CRAFT_PART_SRC}/cmd/runtimes/mlx/requirements.txt"
       mkdir -p "${CRAFT_PART_INSTALL}${HOME}" "${CRAFT_PART_INSTALL}${HOME}/.cache"
       cp -a "${HOME}/.local" "${CRAFT_PART_INSTALL}${HOME}/"
 

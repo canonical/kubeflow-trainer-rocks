@@ -10,6 +10,7 @@ import yaml
 # The ClusterTrainingRuntime runs as mpiuser rather than the rock's run-user.
 MPI_USER_ID = "1000"
 
+
 def test_container_is_running(rock_container):
     """Test that the container keeps running."""
     result = subprocess.run(
@@ -84,6 +85,7 @@ def test_pip_available(rock_container):
     )
     # Ubuntu's pip 22.0.2 in /usr/lib/python3/dist-packages means the upgrade didn't ship.
     assert "/home/mpiuser/.local/lib/python3.10/site-packages/pip" in result.stdout
+
 
 @pytest.mark.parametrize(
     "option",
@@ -177,6 +179,7 @@ def test_sshd_as_mpiuser(rock_container):
     # password is back (see the useradd comment in rockcraft.yaml).
     assert result.stdout.strip() == "mpiuser"
 
+
 def test_security_manifest(rock_container):
     """Test that the dpkg/os-release manifest required by the security team is present."""
     subprocess.run(
@@ -193,7 +196,7 @@ def test_security_manifest(rock_container):
 
 
 def test_environment_variables():
-    """"Test env vars."""
+    """Test that rockcraft.yaml sets the env vars the rock relies on; it may define more."""
     expected = {
         "HOME": "/home/mpiuser",
         "PATH": (
